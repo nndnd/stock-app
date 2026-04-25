@@ -41,14 +41,52 @@ KAKAO_TOKEN       = st.secrets.get("KAKAO_ACCESS_TOKEN", "")
 ANTHROPIC_API_KEY = st.secrets.get("ANTHROPIC_API_KEY", "")
 
 POPULAR_STOCKS = {
-    "🍎 Apple (AAPL)": "AAPL",
-    "🖥️ NVIDIA (NVDA)": "NVDA",
-    "🚗 Tesla (TSLA)": "TSLA",
-    "💻 Microsoft (MSFT)": "MSFT",
-    "📦 Amazon (AMZN)": "AMZN",
-    "🔍 Alphabet (GOOGL)": "GOOGL",
-    "📱 Meta (META)": "META",
-    "🎬 Netflix (NFLX)": "NFLX",
+    "AAPL - Apple": "AAPL", "NVDA - NVIDIA": "NVDA", "MSFT - Microsoft": "MSFT",
+    "AMZN - Amazon": "AMZN", "GOOGL - Alphabet": "GOOGL", "META - Meta": "META",
+    "TSLA - Tesla": "TSLA", "AVGO - Broadcom": "AVGO", "TSM - TSMC": "TSM",
+    "NFLX - Netflix": "NFLX", "AMD - AMD": "AMD", "ORCL - Oracle": "ORCL",
+    "ASML - ASML": "ASML", "COST - Costco": "COST", "QCOM - Qualcomm": "QCOM",
+    "AMAT - Applied Materials": "AMAT", "TXN - Texas Instruments": "TXN",
+    "INTU - Intuit": "INTU", "AMGN - Amgen": "AMGN", "MU - Micron": "MU",
+    "HON - Honeywell": "HON", "INTC - Intel": "INTC", "LRCX - Lam Research": "LRCX",
+    "KLAC - KLA Corp": "KLAC", "MRVL - Marvell": "MRVL", "CDNS - Cadence": "CDNS",
+    "SNPS - Synopsys": "SNPS", "PANW - Palo Alto": "PANW", "CRWD - CrowdStrike": "CRWD",
+    "ABNB - Airbnb": "ABNB", "DDOG - Datadog": "DDOG", "SNOW - Snowflake": "SNOW",
+    "TEAM - Atlassian": "TEAM", "ZS - Zscaler": "ZS", "JPM - JPMorgan": "JPM",
+    "BAC - Bank of America": "BAC", "GS - Goldman Sachs": "GS", "MS - Morgan Stanley": "MS",
+    "V - Visa": "V", "MA - Mastercard": "MA", "BRK-B - Berkshire B": "BRK-B",
+    "WFC - Wells Fargo": "WFC", "SCHW - Charles Schwab": "SCHW", "AXP - Amex": "AXP",
+    "BLK - BlackRock": "BLK", "SPGI - S&P Global": "SPGI", "UNH - UnitedHealth": "UNH",
+    "JNJ - Johnson & Johnson": "JNJ", "LLY - Eli Lilly": "LLY", "PFE - Pfizer": "PFE",
+    "ABBV - AbbVie": "ABBV", "MRK - Merck": "MRK", "TMO - Thermo Fisher": "TMO",
+    "DHR - Danaher": "DHR", "ISRG - Intuitive Surgical": "ISRG", "BSX - Boston Scientific": "BSX",
+    "REGN - Regeneron": "REGN", "GILD - Gilead": "GILD", "WMT - Walmart": "WMT",
+    "HD - Home Depot": "HD", "MCD - McDonald's": "MCD", "NKE - Nike": "NKE",
+    "SBUX - Starbucks": "SBUX", "LOW - Lowe's": "LOW", "TGT - Target": "TGT",
+    "BKNG - Booking Holdings": "BKNG", "MAR - Marriott": "MAR", "CMG - Chipotle": "CMG",
+    "XOM - Exxon Mobil": "XOM", "CVX - Chevron": "CVX", "COP - ConocoPhillips": "COP",
+    "SLB - Schlumberger": "SLB", "NEE - NextEra Energy": "NEE", "DUK - Duke Energy": "DUK",
+    "SO - Southern Company": "SO", "GE - GE Aerospace": "GE", "CAT - Caterpillar": "CAT",
+    "BA - Boeing": "BA", "RTX - RTX Corp": "RTX", "LMT - Lockheed Martin": "LMT",
+    "UPS - UPS": "UPS", "FDX - FedEx": "FDX", "DE - John Deere": "DE",
+    "MMM - 3M": "MMM", "UBER - Uber": "UBER", "LYFT - Lyft": "LYFT",
+    "COIN - Coinbase": "COIN", "MSTR - MicroStrategy": "MSTR", "PLTR - Palantir": "PLTR",
+    "ARM - ARM Holdings": "ARM", "SMCI - Super Micro": "SMCI", "DELL - Dell": "DELL",
+    "CRM - Salesforce": "CRM", "NOW - ServiceNow": "NOW", "ADBE - Adobe": "ADBE",
+    "SHOP - Shopify": "SHOP", "SQ - Block": "SQ", "PYPL - PayPal": "PYPL",
+    "SPOT - Spotify": "SPOT", "LIN - Linde": "LIN",
+}
+
+SECTOR_MAP = {
+    "반도체": ["NVDA","AMD","INTC","QCOM","AVGO","MU","AMAT","LRCX","KLAC","MRVL","TSM","ASML","ARM","SMCI"],
+    "빅테크": ["AAPL","MSFT","GOOGL","META","AMZN","NFLX","ADBE","CRM","NOW","ORCL"],
+    "AI/클라우드": ["NVDA","MSFT","GOOGL","AMZN","PLTR","DDOG","SNOW","CRWD","PANW","ZS"],
+    "전기차/에너지": ["TSLA","NEE","DUK","SO","XOM","CVX","COP","SLB"],
+    "금융": ["JPM","BAC","GS","MS","V","MA","BRK-B","WFC","SCHW","AXP","BLK","SPGI","COIN","PYPL","SQ"],
+    "헬스케어": ["UNH","JNJ","LLY","PFE","ABBV","MRK","TMO","DHR","ISRG","BSX","REGN","GILD","AMGN"],
+    "소비재": ["WMT","HD","MCD","NKE","SBUX","LOW","TGT","BKNG","MAR","CMG","COST"],
+    "산업/방산": ["GE","CAT","BA","RTX","LMT","UPS","FDX","DE","MMM","HON"],
+    "성장주": ["TSLA","SHOP","UBER","COIN","PLTR","CRWD","SNOW","DDOG","ABNB","MSTR"],
 }
 
 # ── 데이터 함수 ──────────────────────────────────────────
@@ -164,29 +202,70 @@ def send_kakao(token, message):
     except:
         return False
 
-# ── Claude AI 포트폴리오 추천 ────────────────────────────
+# ── 포트폴리오 추천 (규칙 기반 + Claude AI 선택) ──────────
+RULE_BASED_PORTFOLIO = {
+    "안정형 (저위험)": {
+        "summary": "배당주·대형주 중심의 안정적 포트폴리오",
+        "strategy": "변동성이 낮고 배당수익률이 높은 종목 위주로 구성했어요. 경기 방어적 섹터 비중을 높여 하락장에서도 안정적인 수익을 추구해요.",
+        "by_sector": {
+            "금융": [("JPM","JPMorgan",20,"배당 안정적, 미국 최대 은행"),("V","Visa",15,"글로벌 결제 인프라 독점")],
+            "헬스케어": [("JNJ","J&J",15,"배당왕, 방어적 헬스케어"),("UNH","UnitedHealth",10,"미국 최대 건강보험")],
+            "소비재": [("WMT","Walmart",15,"경기 무관 필수소비재"),("COST","Costco",10,"회원제 모델 고충성도")],
+            "산업": [("LMT","Lockheed Martin",15,"방산 안정 수익")],
+        }
+    },
+    "중립형 (중위험)": {
+        "summary": "성장성과 안정성을 균형있게 갖춘 포트폴리오",
+        "strategy": "빅테크와 반도체 성장주를 핵심으로, 금융·헬스케어로 리스크를 분산했어요. 장기 성장성과 안정성을 함께 추구해요.",
+        "by_sector": {
+            "빅테크": [("AAPL","Apple",20,"생태계 독점, 안정 성장"),("MSFT","Microsoft",20,"클라우드·AI 1위")],
+            "반도체": [("NVDA","NVIDIA",20,"AI 인프라 핵심"),("AMD","AMD",10,"데이터센터 점유율 확대")],
+            "금융": [("V","Visa",15,"결제 인프라 독점")],
+            "헬스케어": [("LLY","Eli Lilly",15,"비만치료제 고성장")],
+        }
+    },
+    "공격형 (고위험)": {
+        "summary": "고성장 기술주 중심의 공격적 포트폴리오",
+        "strategy": "AI·반도체·성장 플랫폼에 집중 투자해요. 단기 변동성은 크지만 장기 고수익을 추구하는 전략이에요.",
+        "by_sector": {
+            "반도체/AI": [("NVDA","NVIDIA",30,"AI GPU 시장 90% 점유"),("AMD","AMD",15,"AI 반도체 2위")],
+            "성장주": [("TSLA","Tesla",15,"로보택시·에너지 확장"),("PLTR","Palantir",10,"AI 국방·기업 솔루션")],
+            "빅테크": [("META","Meta",15,"AI 광고·메타버스"),("GOOGL","Alphabet",15,"AI 검색·클라우드")],
+        }
+    }
+}
+
+def rule_based_recommend(risk, amount, sectors):
+    base = RULE_BASED_PORTFOLIO.get(risk, RULE_BASED_PORTFOLIO["중립형 (중위험)"])
+    all_stocks = []
+    for sector, stocks in base["by_sector"].items():
+        for ticker, name, weight, reason in stocks:
+            all_stocks.append({"ticker": ticker, "name": name, "weight": weight, "reason": reason})
+    
+    # 관심 섹터 가중치 조정
+    sector_ticker_map = {}
+    for s, tickers in SECTOR_MAP.items():
+        for t in tickers:
+            sector_ticker_map[t] = s
+    
+    if sectors:
+        for s in all_stocks:
+            t_sector = sector_ticker_map.get(s["ticker"], "")
+            if any(sel in t_sector for sel in sectors):
+                s["weight"] = min(s["weight"] + 5, 35)
+    
+    total = sum(s["weight"] for s in all_stocks)
+    for s in all_stocks:
+        s["weight"] = round(s["weight"] / total * 100)
+    
+    diff = 100 - sum(s["weight"] for s in all_stocks)
+    all_stocks[0]["weight"] += diff
+    
+    return {"summary": base["summary"], "stocks": all_stocks, "strategy": base["strategy"]}
+
 def ai_portfolio_recommend(risk, amount, sectors, api_key):
     if not api_key:
-        return None
-    prompt = f"""당신은 미국 주식 투자 전문가입니다.
-투자자 정보:
-- 투자 성향: {risk}
-- 투자 금액: ${amount:,}
-- 관심 섹터: {', '.join(sectors)}
-
-위 조건에 맞는 미국 주식 포트폴리오를 추천해주세요.
-반드시 JSON 형식으로만 답변하세요. 다른 텍스트는 절대 포함하지 마세요.
-형식:
-{{
-  "summary": "포트폴리오 요약 한 줄",
-  "stocks": [
-    {{"ticker": "AAPL", "name": "Apple", "weight": 25, "reason": "추천 이유 한 문장"}},
-    ...
-  ],
-  "strategy": "전체 전략 설명 2~3문장"
-}}
-5~7개 종목, weight 합계는 반드시 100이어야 합니다."""
-
+        return rule_based_recommend(risk, amount, sectors)
     try:
         r = requests.post(
             "https://api.anthropic.com/v1/messages",
@@ -198,15 +277,19 @@ def ai_portfolio_recommend(risk, amount, sectors, api_key):
             json={
                 "model": "claude-sonnet-4-20250514",
                 "max_tokens": 1000,
-                "messages": [{"role": "user", "content": prompt}]
+                "messages": [{"role": "user", "content": f"""미국 주식 투자 전문가로서 포트폴리오를 추천해주세요.
+투자 성향: {risk}, 금액: ${amount:,}, 관심 섹터: {', '.join(sectors)}
+JSON만 반환하세요:
+{{"summary":"한줄요약","stocks":[{{"ticker":"AAPL","name":"Apple","weight":20,"reason":"이유"}}],"strategy":"전략설명"}}
+5~7개 종목, weight 합계 100."""}]
             },
             timeout=30
         )
         text = r.json()["content"][0]["text"]
         text = text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
         return json.loads(text)
-    except Exception as e:
-        return None
+    except:
+        return rule_based_recommend(risk, amount, sectors)
 
 # ── 주가 예측 (다항회귀) ─────────────────────────────────
 def run_prediction(hist, days):
@@ -258,8 +341,15 @@ def run_prediction(hist, days):
 # ────────────────────────────────────────────────────────
 with st.sidebar:
     st.title("📈 주식 분석")
-    selected_label = st.selectbox("종목 선택", list(POPULAR_STOCKS.keys()))
-    ticker = POPULAR_STOCKS[selected_label]
+    sector_filter = st.selectbox("섹터 필터", ["전체"] + list(SECTOR_MAP.keys()))
+    if sector_filter == "전체":
+        filtered = POPULAR_STOCKS
+    else:
+        allowed = SECTOR_MAP[sector_filter]
+        filtered = {k: v for k, v in POPULAR_STOCKS.items() if v in allowed}
+    
+    selected_label = st.selectbox("종목 선택", list(filtered.keys()))
+    ticker = filtered[selected_label]
     custom = st.text_input("직접 입력 (예: NFLX)", placeholder="티커 입력")
     if custom.strip():
         ticker = custom.strip().upper()
@@ -713,11 +803,10 @@ with tabs[5]:
 # ─── 탭 7: AI 포트폴리오 추천 ───────────────────────────
 with tabs[6]:
     st.subheader("AI 포트폴리오 추천")
-    st.caption("투자 성향을 입력하면 Claude AI가 맞춤 포트폴리오를 추천해드려요.")
+    st.caption("투자 성향을 입력하면 맞춤 포트폴리오를 추천해드려요. Claude API 키가 없어도 규칙 기반으로 동작해요.")
 
     if not ANTHROPIC_API_KEY:
-        st.warning("Claude API 키가 설정되지 않았어요. Secrets에 ANTHROPIC_API_KEY를 추가해주세요.")
-        st.code('ANTHROPIC_API_KEY = "sk-ant-..."', language="toml")
+        st.info("Claude API 키 없이 규칙 기반 추천으로 동작해요. API 키를 추가하면 더 정교한 AI 추천을 받을 수 있어요.")
 
     col_ai1, col_ai2 = st.columns(2)
     with col_ai1:
@@ -731,7 +820,7 @@ with tabs[6]:
             default=["기술 (Tech)", "AI/클라우드"]
         )
 
-    if st.button("AI 추천 받기", type="primary", disabled=not ANTHROPIC_API_KEY):
+    if st.button("포트폴리오 추천 받기", type="primary"):
         with st.spinner("Claude AI가 포트폴리오를 분석 중... (약 10~15초)"):
             result = ai_portfolio_recommend(risk, amount, sectors, ANTHROPIC_API_KEY)
 
