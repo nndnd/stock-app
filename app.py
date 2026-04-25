@@ -208,20 +208,49 @@ def ai_portfolio_recommend(risk, amount, sectors, api_key):
     except Exception as e:
         return None
 
-# ── 주가 예측 (Prophet) ──────────────────────────────────
-def run_prophet(hist, days):
+# ── 주가 예측 (다항회귀) ─────────────────────────────────
+def run_prediction(hist, days):
     try:
-        from prophet import Prophet
-        df = hist[["Close"]].reset_index()
-        df.columns = ["ds", "y"]
-        df["ds"] = pd.to_datetime(df["ds"]).dt.tz_localize(None)
-        m = Prophet(daily_seasonality=False, yearly_seasonality=True, changepoint_prior_scale=0.05)
-        m.fit(df)
-        future = m.make_future_dataframe(periods=days)
-        fc = m.predict(future)
-        return df, fc
+        from sklearn.linear_model import LinearRegression
+        from sklearn.preprocessing import PolynomialFeatures
+
+        close = hist["Close"].values
+        n = len(close)
+
+        # 이동평균으로 추세 스무딩
+        window = min(20, n // 5)
+        smoothed = pd.Series(close).rolling(window, min_periods=1).mean().values
+
+        # 다항 회귀 (2차)
+        X = np.arange(n).reshape(-1, 1)
+        poly = PolynomialFeatures(degree=2)
+        X_poly = poly.fit_transform(X)
+        model = LinearRegression()
+        model.fit(X_poly, smoothed)
+
+        # 미래 예측
+        X_future = np.arange(n + days).reshape(-1, 1)
+        X_future_poly = poly.transform(X_future)
+        y_pred = model.predict(X_future_poly)
+
+        # 표준편차로 신뢰구간 계산
+        residuals = smoothed - model.predict(X_poly)
+        std = np.std(residuals)
+
+        # 날짜 생성
+        last_date = pd.to_datetime(hist.index[-1]).tz_localize(None) if hist.index[-1].tzinfo else pd.to_datetime(hist.index[-1])
+        future_dates = pd.date_range(start=last_date, periods=n + days)
+
+        df_hist = pd.DataFrame({"ds": pd.to_datetime(hist.index).tz_localize(None), "y": close})
+        fc = pd.DataFrame({
+            "ds": future_dates,
+            "yhat": y_pred,
+            "yhat_upper": y_pred + 1.96 * std,
+            "yhat_lower": y_pred - 1.96 * std,
+        })
+        return df_hist, fc
     except Exception as e:
-        st.error(f"Prophet 오류: {e}")
+        st.error(f"예측 오류: {e}")
         return None, None
 
 # ────────────────────────────────────────────────────────
@@ -626,14 +655,14 @@ with tabs[4]:
 
 # ─── 탭 6: 주가 예측 ────────────────────────────────────
 with tabs[5]:
-    st.subheader("주가 예측 (Prophet)")
-    st.caption("Facebook이 만든 시계열 예측 모델로 추세를 예측해요.")
+    st.subheader("주가 예측 (다항회귀 모델)")
+    st.caption("과거 주가 추세를 학습해 미래 가격을 예측해요. (다항회귀 + 95% 신뢰구간)")
 
     pred_days = st.slider("예측 기간 (일)", 7, 90, 30)
 
     if st.button("예측 시작", type="primary"):
-        with st.spinner("모델 학습 중... (약 10~20초)"):
-            df_p, fc = run_prophet(hist, pred_days)
+        with st.spinner("모델 학습 중..."):
+            df_p, fc = run_prediction(hist, pred_days)
 
         if fc is not None:
             pred_price  = fc["yhat"].iloc[-1]
