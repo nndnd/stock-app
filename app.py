@@ -163,6 +163,32 @@ def get_stock(ticker, period="1y"):
     except:
         return None, {}
 
+# 분봉/시봉/일봉 통합 데이터 함수
+# interval: 1m,5m,15m,60m,240m -> period 자동 매핑
+INTERVAL_CONFIG = {
+    "1분":   {"interval":"1m",  "period":"1d",  "dtfmt":"%H:%M",       "label":"1분봉"},
+    "5분":   {"interval":"5m",  "period":"5d",  "dtfmt":"%m/%d %H:%M", "label":"5분봉"},
+    "10분":  {"interval":"15m", "period":"5d",  "dtfmt":"%m/%d %H:%M", "label":"15분봉"},
+    "60분":  {"interval":"60m", "period":"1mo", "dtfmt":"%m/%d %H:%M", "label":"60분봉"},
+    "240분": {"interval":"60m", "period":"3mo", "dtfmt":"%m/%d",       "label":"4시간봉"},
+    "일":    {"interval":"1d",  "period":"1y",  "dtfmt":"%Y/%m/%d",    "label":"일봉"},
+    "주":    {"interval":"1wk", "period":"5y",  "dtfmt":"%Y/%m/%d",    "label":"주봉"},
+    "월":    {"interval":"1mo", "period":"10y", "dtfmt":"%Y/%m",       "label":"월봉"},
+    "년":    {"interval":"3mo", "period":"max", "dtfmt":"%Y",          "label":"분기봉"},
+}
+
+@st.cache_data(ttl=120)
+def get_chart_data(ticker, timeframe):
+    cfg = INTERVAL_CONFIG.get(timeframe, INTERVAL_CONFIG["일"])
+    try:
+        s = yf.Ticker(ticker)
+        hist = s.history(period=cfg["period"], interval=cfg["interval"])
+        if hist.index.tz is not None:
+            hist.index = hist.index.tz_convert("America/New_York")
+        return hist
+    except:
+        return None
+
 @st.cache_data(ttl=600)
 def get_rank_data(tickers):
     rows = []
@@ -243,6 +269,87 @@ def compute_signals(hist):
     elif close.iloc[-1] > (ma20b + 2*std).iloc[-1]: signals["볼린저밴드"] = ("상단돌파—과열","🔴")
     else: signals["볼린저밴드"] = ("밴드내","⚪")
     return signals, rsi_val
+
+def compute_ai_score(hist, info):
+    """기술적 지표 + 재무 데이터 종합해 0~100 점수 산출"""
+    score = 50  # 기본 중립
+    details = []
+    close = hist["Close"]
+
+    # 이동평균 (20점)
+    if len(close) >= 50:
+        ma20 = close.rolling(20).mean().iloc[-1]
+        ma50 = close.rolling(50).mean().iloc[-1]
+        if ma20 > ma50:
+            score += 10; details.append(("MA20>MA50", "+10", "🟢"))
+        else:
+            score -= 10; details.append(("MA20<MA50", "-10", "🔴"))
+
+    # RSI (20점)
+    delta = close.diff()
+    gain = delta.clip(lower=0).rolling(14).mean()
+    loss = (-delta.clip(upper=0)).rolling(14).mean()
+    rsi = (100 - (100 / (1 + gain / loss))).iloc[-1]
+    if rsi < 30:
+        score += 15; details.append((f"RSI {rsi:.0f} 과매도", "+15", "🟢"))
+    elif rsi < 50:
+        score += 5;  details.append((f"RSI {rsi:.0f} 중립↑", "+5", "🟡"))
+    elif rsi < 70:
+        score -= 5;  details.append((f"RSI {rsi:.0f} 중립↓", "-5", "🟡"))
+    else:
+        score -= 15; details.append((f"RSI {rsi:.0f} 과매수", "-15", "🔴"))
+
+    # MACD (15점)
+    ema12 = close.ewm(span=12).mean()
+    ema26 = close.ewm(span=26).mean()
+    macd  = (ema12 - ema26).iloc[-1]
+    sig   = (ema12 - ema26).ewm(span=9).mean().iloc[-1]
+    if macd > sig:
+        score += 10; details.append(("MACD 상향 교차", "+10", "🟢"))
+    else:
+        score -= 10; details.append(("MACD 하향 교차", "-10", "🔴"))
+
+    # 볼린저밴드 (10점)
+    ma20b = close.rolling(20).mean()
+    std   = close.rolling(20).std()
+    curr  = close.iloc[-1]
+    if curr < (ma20b - 2*std).iloc[-1]:
+        score += 8;  details.append(("BB 하단 이탈", "+8", "🟢"))
+    elif curr > (ma20b + 2*std).iloc[-1]:
+        score -= 8;  details.append(("BB 상단 돌파", "-8", "🔴"))
+    else:
+        details.append(("BB 밴드 내 위치", "0", "⚪"))
+
+    # 52주 위치 (10점)
+    h52 = info.get("fiftyTwoWeekHigh", curr)
+    l52 = info.get("fiftyTwoWeekLow",  curr)
+    if h52 > l52:
+        pos = (curr - l52) / (h52 - l52) * 100
+        if pos < 30:
+            score += 8;  details.append((f"52주 하단권 {pos:.0f}%", "+8", "🟢"))
+        elif pos > 80:
+            score -= 5;  details.append((f"52주 상단권 {pos:.0f}%", "-5", "🔴"))
+        else:
+            details.append((f"52주 중간권 {pos:.0f}%", "0", "⚪"))
+
+    # PER (5점)
+    per = info.get("trailingPE")
+    if per:
+        if per < 15:
+            score += 5;  details.append((f"PER {per:.1f} 저평가", "+5", "🟢"))
+        elif per > 40:
+            score -= 5;  details.append((f"PER {per:.1f} 고평가", "-5", "🔴"))
+        else:
+            details.append((f"PER {per:.1f} 적정", "0", "⚪"))
+
+    score = max(0, min(100, score))
+    if score >= 70:   grade, grade_col = "강한 매수 신호", "#2d8a4e"
+    elif score >= 55: grade, grade_col = "약한 매수 신호", "#5dade2"
+    elif score >= 45: grade, grade_col = "중립", "#888"
+    elif score >= 30: grade, grade_col = "약한 매도 신호", "#e67e22"
+    else:             grade, grade_col = "강한 매도 신호", "#c0392b"
+
+    return score, grade, grade_col, details, rsi
 
 def send_kakao(token, message):
     if not token: return False
@@ -484,20 +591,34 @@ with main_tabs[1]:
         ticker = selected_label.split(" - ")[0]
         st.session_state.selected_ticker = ticker
     with ctrl2:
-        period = st.selectbox("기간", ["1mo","3mo","6mo","1y","2y"], index=3,
-                              format_func=lambda x: {"1mo":"1개월","3mo":"3개월","6mo":"6개월","1y":"1년","2y":"2년"}[x])
-    with ctrl3:
         kakao_alert = st.toggle("카카오 알림", value=False)
+    with ctrl3:
+        with st.expander("가격 알림"):
+            alert_high = st.number_input("목표가 $", min_value=0.0, value=0.0, step=1.0)
+            alert_low  = st.number_input("하한가 $", min_value=0.0, value=0.0, step=1.0)
 
-    # 알림 설정
-    with st.expander("가격 알림 설정"):
-        ac1, ac2 = st.columns(2)
-        alert_high = ac1.number_input("목표가 (상단) $", min_value=0.0, value=0.0, step=1.0)
-        alert_low  = ac2.number_input("하한가 (하단) $", min_value=0.0, value=0.0, step=1.0)
+    # 타임프레임 버튼
+    if "timeframe" not in st.session_state:
+        st.session_state.timeframe = "일"
+    tf_options = list(INTERVAL_CONFIG.keys())
+    tf_cols = st.columns(len(tf_options))
+    for i, tf in enumerate(tf_options):
+        is_active = st.session_state.timeframe == tf
+        if tf_cols[i].button(
+            tf,
+            key=f"tf_{tf}",
+            use_container_width=True,
+            type="primary" if is_active else "secondary"
+        ):
+            st.session_state.timeframe = tf
+            st.rerun()
+    timeframe = st.session_state.timeframe
+    period = INTERVAL_CONFIG[timeframe]["period"]
 
-    # 데이터 로드
+    # 데이터 로드 (일반 + 차트용)
     with st.spinner(f"{ticker} 데이터 불러오는 중..."):
-        hist, info = get_stock(ticker, period)
+        hist, info = get_stock(ticker, "1y")   # 신호 계산용은 항상 1y
+        chart_hist = get_chart_data(ticker, timeframe)  # 차트용
 
     if hist is None or hist.empty:
         st.error("데이터를 불러올 수 없어요. 잠시 후 다시 시도해주세요.")
@@ -539,31 +660,74 @@ with main_tabs[1]:
     with tabs[0]:
         col_c, col_s = st.columns([3, 1])
         with col_c:
-            fig = go.Figure()
-            fig.add_trace(go.Candlestick(
-                x=hist.index, open=hist["Open"], high=hist["High"],
-                low=hist["Low"], close=hist["Close"], name=ticker,
-                increasing_line_color="#2d8a4e", decreasing_line_color="#c0392b"
-            ))
-            ma20 = hist["Close"].rolling(20).mean()
-            ma50 = hist["Close"].rolling(50).mean()
-            fig.add_trace(go.Scatter(x=hist.index, y=ma20, name="MA20", line=dict(color="#3498db", width=1.2)))
-            fig.add_trace(go.Scatter(x=hist.index, y=ma50, name="MA50", line=dict(color="#e67e22", width=1.2, dash="dot")))
-            std  = hist["Close"].rolling(20).std()
-            fig.add_trace(go.Scatter(x=hist.index, y=ma20+2*std, name="BB상단", line=dict(color="gray", width=0.8, dash="dash")))
-            fig.add_trace(go.Scatter(x=hist.index, y=ma20-2*std, name="BB하단", line=dict(color="gray", width=0.8, dash="dash"),
-                                     fill="tonexty", fillcolor="rgba(128,128,128,0.05)"))
-            fig.update_layout(xaxis_rangeslider_visible=False, height=420, margin=dict(l=0,r=0,t=10,b=0),
-                              paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                              xaxis=dict(showgrid=False), yaxis=dict(gridcolor="#f0f0f0"),
-                              legend=dict(orientation="h", y=1.05))
-            st.plotly_chart(fig, use_container_width=True)
-            vol_colors = ["#2d8a4e" if c>=o else "#c0392b" for c,o in zip(hist["Close"], hist["Open"])]
-            fig_vol = go.Figure(go.Bar(x=hist.index, y=hist["Volume"], marker_color=vol_colors))
-            fig_vol.update_layout(height=100, margin=dict(l=0,r=0,t=0,b=0),
-                                  paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                                  xaxis=dict(showgrid=False), yaxis=dict(showgrid=False, showticklabels=False))
-            st.plotly_chart(fig_vol, use_container_width=True)
+            cfg = INTERVAL_CONFIG[timeframe]
+
+            if chart_hist is None or chart_hist.empty:
+                st.warning("차트 데이터를 불러올 수 없어요.")
+            else:
+                ch = chart_hist.copy()
+                # x축 레이블 포맷
+                x_labels = ch.index.strftime(cfg["dtfmt"])
+
+                # 캔들 차트
+                fig = go.Figure()
+                fig.add_trace(go.Candlestick(
+                    x=ch.index, open=ch["Open"], high=ch["High"],
+                    low=ch["Low"], close=ch["Close"], name=ticker,
+                    increasing_line_color="#2d8a4e", decreasing_line_color="#c0392b"
+                ))
+                # MA는 일봉 이상에서만
+                if timeframe in ["일","주","월","년"]:
+                    ma20c = ch["Close"].rolling(20).mean()
+                    ma50c = ch["Close"].rolling(50).mean()
+                    fig.add_trace(go.Scatter(x=ch.index, y=ma20c, name="MA20",
+                                            line=dict(color="#3498db", width=1.2)))
+                    fig.add_trace(go.Scatter(x=ch.index, y=ma50c, name="MA50",
+                                            line=dict(color="#e67e22", width=1.2, dash="dot")))
+                    std_c = ch["Close"].rolling(20).std()
+                    fig.add_trace(go.Scatter(x=ch.index, y=ma20c+2*std_c, name="BB상단",
+                                            line=dict(color="gray", width=0.8, dash="dash")))
+                    fig.add_trace(go.Scatter(x=ch.index, y=ma20c-2*std_c, name="BB하단",
+                                            line=dict(color="gray", width=0.8, dash="dash"),
+                                            fill="tonexty", fillcolor="rgba(128,128,128,0.05)"))
+
+                # x축 타입 설정 (분봉은 category로)
+                xaxis_cfg = dict(showgrid=False)
+                if timeframe in ["1분","5분","10분","60분","240분"]:
+                    xaxis_cfg["type"] = "category"
+                    xaxis_cfg["ticktext"] = x_labels
+                    xaxis_cfg["tickvals"] = list(range(len(ch)))
+                    xaxis_cfg["tickangle"] = -30
+                    xaxis_cfg["nticks"] = 10
+
+                fig.update_layout(
+                    xaxis_rangeslider_visible=False, height=420,
+                    margin=dict(l=0,r=0,t=10,b=0),
+                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                    xaxis=xaxis_cfg, yaxis=dict(gridcolor="#f0f0f0"),
+                    legend=dict(orientation="h", y=1.05),
+                    title=dict(text=f"{ticker} · {cfg['label']}", font=dict(size=13), x=0)
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+                # 거래량
+                vol_colors = ["#2d8a4e" if c>=o else "#c0392b"
+                              for c,o in zip(ch["Close"], ch["Open"])]
+                fig_vol = go.Figure(go.Bar(
+                    x=ch.index if timeframe not in ["1분","5분","10분","60분","240분"] else list(range(len(ch))),
+                    y=ch["Volume"], marker_color=vol_colors))
+                fig_vol.update_layout(
+                    height=100, margin=dict(l=0,r=0,t=0,b=0),
+                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                    xaxis=dict(showgrid=False,
+                               ticktext=x_labels if timeframe in ["1분","5분","10분","60분","240분"] else None,
+                               tickvals=list(range(len(ch))) if timeframe in ["1분","5분","10분","60분","240분"] else None,
+                               nticks=10),
+                    yaxis=dict(showgrid=False, showticklabels=False))
+                st.plotly_chart(fig_vol, use_container_width=True)
+
+                # 현재 타임프레임 정보
+                st.caption(f"· {cfg['label']} | {len(ch)}개 캔들 | 마지막 업데이트: {datetime.now().strftime('%H:%M:%S')}")
 
         with col_s:
             st.subheader("멀티 비교")
@@ -634,30 +798,88 @@ with main_tabs[1]:
     with tabs[2]:
         if len(hist) >= 20:
             signals, rsi_val = compute_signals(hist)
+            ai_score, grade, grade_col, score_details, _ = compute_ai_score(hist, info)
+
             buy_cnt  = sum(1 for v in signals.values() if "매수" in v[0] or "과매도" in v[0] or "반등" in v[0])
             sell_cnt = sum(1 for v in signals.values() if "매도" in v[0] or "과매수" in v[0] or "과열" in v[0])
-            cs1, cs2 = st.columns([1,1])
+
+            # ── AI 종합 점수 대시보드 ──
+            st.markdown("#### AI 종합 점수")
+            sc1, sc2, sc3 = st.columns([1, 2, 1])
+            with sc1:
+                fig_gauge = go.Figure(go.Indicator(
+                    mode="gauge+number",
+                    value=ai_score,
+                    number={"suffix": "점", "font": {"size": 36}},
+                    gauge={
+                        "axis": {"range": [0, 100], "tickwidth": 1},
+                        "bar":  {"color": grade_col, "thickness": 0.3},
+                        "steps": [
+                            {"range": [0,  30], "color": "#fdedec"},
+                            {"range": [30, 45], "color": "#fef9e7"},
+                            {"range": [45, 55], "color": "#f5f5f5"},
+                            {"range": [55, 70], "color": "#eaf4fb"},
+                            {"range": [70,100], "color": "#eafaf1"},
+                        ],
+                        "threshold": {"line": {"color": grade_col, "width": 3}, "value": ai_score}
+                    }
+                ))
+                fig_gauge.update_layout(height=220, margin=dict(l=10,r=10,t=20,b=10),
+                                        paper_bgcolor="rgba(0,0,0,0)")
+                st.plotly_chart(fig_gauge, use_container_width=True)
+
+            with sc2:
+                st.markdown(f"""
+                <div style='background:{grade_col}18;border-left:4px solid {grade_col};
+                            border-radius:0 10px 10px 0;padding:14px 16px;margin-bottom:10px'>
+                    <div style='font-size:22px;font-weight:700;color:{grade_col}'>{grade}</div>
+                    <div style='font-size:12px;color:#888;margin-top:4px'>
+                        기술적 지표 + 재무 데이터 종합 분석 점수
+                    </div>
+                </div>""", unsafe_allow_html=True)
+                for name, delta, icon in score_details:
+                    clr = "#2d8a4e" if "+" in delta else "#c0392b" if "-" in delta else "#888"
+                    st.markdown(
+                        f"<div style='display:flex;justify-content:space-between;padding:4px 0;"
+                        f"border-bottom:0.5px solid #f0f0f0;font-size:13px'>"
+                        f"<span>{icon} {name}</span>"
+                        f"<span style='font-weight:600;color:{clr}'>{delta}</span></div>",
+                        unsafe_allow_html=True)
+
+            with sc3:
+                fig_rsi = go.Figure(go.Indicator(
+                    mode="gauge+number", value=rsi_val, title={"text":"RSI"},
+                    gauge={"axis":{"range":[0,100]}, "bar":{"color":"#3498db"},
+                           "steps":[{"range":[0,30],"color":"#eafaf1"},
+                                    {"range":[30,70],"color":"#fdfefe"},
+                                    {"range":[70,100],"color":"#fdedec"}],
+                           "threshold":{"line":{"color":"red","width":2},"value":70}}))
+                fig_rsi.update_layout(height=220, margin=dict(l=10,r=10,t=30,b=10),
+                                      paper_bgcolor="rgba(0,0,0,0)")
+                st.plotly_chart(fig_rsi, use_container_width=True)
+
+            st.divider()
+            st.markdown("#### 개별 지표 신호")
+            cs1, cs2 = st.columns(2)
             with cs1:
                 if buy_cnt > sell_cnt: st.success(f"**종합: 매수 우세** ({buy_cnt}/{len(signals)})")
                 elif sell_cnt > buy_cnt: st.error(f"**종합: 매도 우세** ({sell_cnt}/{len(signals)})")
                 else: st.info("**종합: 중립**")
                 for name, (label, icon) in signals.items():
-                    bg = "#eafaf1" if "매수" in label or "과매도" in label or "반등" in label else \
-                         "#fdedec" if "매도" in label or "과매수" in label or "과열" in label else "#f5f5f5"
+                    bg = "#eafaf1" if "매수" in label or "과매도" in label or "반등" in label else                          "#fdedec" if "매도" in label or "과매수" in label or "과열" in label else "#f5f5f5"
                     st.markdown(f'<div class="signal-card" style="background:{bg}">'
                                 f'<span style="font-size:13px">{icon} <b>{name}</b></span>'
                                 f'<span style="font-size:12px;color:#555">{label}</span></div>', unsafe_allow_html=True)
             with cs2:
-                fig_rsi = go.Figure(go.Indicator(
-                    mode="gauge+number", value=rsi_val, title={"text":"RSI(14일)"},
-                    gauge={"axis":{"range":[0,100]}, "bar":{"color":"#3498db"},
-                           "steps":[{"range":[0,30],"color":"#eafaf1"},{"range":[30,70],"color":"#fdfefe"},{"range":[70,100],"color":"#fdedec"}],
-                           "threshold":{"line":{"color":"red","width":2},"value":70}}))
-                fig_rsi.update_layout(height=280, margin=dict(l=20,r=20,t=40,b=20))
-                st.plotly_chart(fig_rsi, use_container_width=True)
-                if rsi_val < 30: st.success("과매도 구간 — 반등 가능성")
-                elif rsi_val > 70: st.error("과매수 구간 — 조정 주의")
-                else: st.info("중립 구간")
+                if rsi_val < 30: st.success("RSI: 과매도 구간 — 반등 가능성")
+                elif rsi_val > 70: st.error("RSI: 과매수 구간 — 조정 주의")
+                else: st.info(f"RSI: 중립 구간 ({rsi_val:.1f})")
+
+            # 카카오 알림
+            if kakao_alert and KAKAO_TOKEN:
+                msg = f"[AI 종합 점수] {ticker}\n점수: {ai_score}/100 — {grade}\nRSI: {rsi_val:.1f} | 매수신호: {buy_cnt}/{len(signals)}\n⚠ 참고용 정보입니다"
+                if st.button("📱 카카오톡으로 점수 전송", key="kakao_score"):
+                    send_kakao(KAKAO_TOKEN, msg) and st.success("전송 완료!")
 
     # ── 탭 4: 뉴스 & 감성 ───────────────────────────────
     with tabs[3]:
