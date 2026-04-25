@@ -64,6 +64,12 @@ st.markdown("""
         [data-testid="stSidebar"] { display: none; }
         /* 버튼 풀width */
         .stButton button { width: 100%; font-size: 13px !important; }
+        /* 분석 버튼 소형화 */
+        [data-testid="stHorizontalBlock"] .stButton button {
+            padding: 4px 6px !important;
+            font-size: 12px !important;
+            min-height: 32px !important;
+        }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -350,9 +356,6 @@ def compute_portfolio_stats(holdings):
 st.title("📈 미국 주식 대시보드")
 
 # TOP100에서 종목 클릭 시 탭2 자동 이동 알림
-if st.session_state.get("go_to_detail"):
-    st.info("👇 아래 **종목 상세 분석** 탭을 눌러주세요!", icon="📊")
-
 main_tabs = st.tabs(["🏆 거래대금 TOP 100", "🔍 종목 상세 분석"])
 
 # ════════════════════════════════════════════════════════
@@ -406,22 +409,14 @@ with main_tabs[0]:
 
         st.markdown("---")
 
-        # ── 종목 리스트 렌더링 (데스크탑: 테이블 / 모바일: 카드) ──
-        # 헤더 (데스크탑)
-        st.markdown("""
-        <div style='display:grid;grid-template-columns:36px 70px 1fr 80px 90px 90px 100px 90px 80px;
-                    gap:0 8px;padding:4px 8px;border-bottom:2px solid #f0f0f0;margin-bottom:4px'>
-            <span style='font-size:11px;color:#aaa'>#</span>
-            <span style='font-size:11px;color:#aaa'>티커</span>
-            <span style='font-size:11px;color:#aaa'>종목명</span>
-            <span style='font-size:11px;color:#aaa'>섹터</span>
-            <span style='font-size:11px;color:#aaa;text-align:right'>현재가</span>
-            <span style='font-size:11px;color:#aaa;text-align:right'>등락률</span>
-            <span style='font-size:11px;color:#aaa;text-align:right'>거래대금</span>
-            <span style='font-size:11px;color:#aaa;text-align:right'>시가총액</span>
-            <span style='font-size:11px;color:#aaa'></span>
-        </div>""", unsafe_allow_html=True)
+        # ── 헤더 ──
+        hd = st.columns([0.3, 0.7, 1.5, 0.7, 0.8, 0.8, 0.9, 0.9, 0.7])
+        for col, label in zip(hd, ["#","티커","종목명","섹터","현재가","등락률","거래대금","시가총액","상세"]):
+            col.markdown(f"<p style='font-size:11px;color:#aaa;margin:0;padding:2px 0'>{label}</p>",
+                         unsafe_allow_html=True)
+        st.markdown("<hr style='margin:4px 0 6px;border-color:#f0f0f0'>", unsafe_allow_html=True)
 
+        # ── 종목 행 ──
         for i, row in df_rank.iterrows():
             chg        = row["change_pct"]
             chg_col    = "#2d8a4e" if chg >= 0 else "#c0392b"
@@ -429,41 +424,35 @@ with main_tabs[0]:
             turnover_b = row["turnover"] / 1e9
             mktcap_b   = row["mktcap"]  / 1e9 if row["mktcap"] else 0
             sec_col    = SECTOR_COLORS.get(row["sector"], "#888")
-            bg         = "#fff8f8" if chg < 0 else "#f6fff8" if chg > 0 else "#fafafa"
+            bg         = "#f6fff8" if chg > 0 else "#fff8f8" if chg < 0 else "#fafafa"
 
-            # 한 행 전체를 HTML로 + 버튼은 Streamlit 컴포넌트
-            st.markdown(f"""
-            <div style='display:grid;grid-template-columns:36px 70px 1fr 80px 90px 90px 100px 90px 80px;
-                        gap:0 8px;padding:9px 8px;background:{bg};border-radius:8px;
-                        margin-bottom:3px;align-items:center;border:1px solid #f2f2f2'>
-                <span style='font-size:12px;color:#bbb;font-weight:500'>{i+1}</span>
-                <span style='font-size:14px;font-weight:700;color:#222'>{row["ticker"]}</span>
-                <span style='font-size:13px;color:#444;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>{row["name"]}</span>
-                <span style='font-size:10px;background:{sec_col}20;color:{sec_col};
-                             padding:2px 6px;border-radius:6px;white-space:nowrap'>{row["sector"]}</span>
-                <span style='font-size:13px;font-weight:600;text-align:right;display:block'>${row["price"]:.2f}</span>
-                <span style='font-size:13px;font-weight:600;color:{chg_col};text-align:right;display:block'>{chg_sym}{abs(chg):.2f}%</span>
-                <span style='font-size:12px;color:#666;text-align:right;display:block'>${turnover_b:.1f}B</span>
-                <span style='font-size:12px;color:#666;text-align:right;display:block'>${mktcap_b:.0f}B</span>
-            </div>""", unsafe_allow_html=True)
+            cols = st.columns([0.3, 0.7, 1.5, 0.7, 0.8, 0.8, 0.9, 0.9, 0.7])
+            cols[0].markdown(f"<p style='font-size:12px;color:#bbb;margin:0;padding:6px 0'>{i+1}</p>", unsafe_allow_html=True)
+            cols[1].markdown(f"<p style='font-size:13px;font-weight:700;margin:0;padding:6px 0'>{row['ticker']}</p>", unsafe_allow_html=True)
+            cols[2].markdown(f"<p style='font-size:12px;color:#555;margin:0;padding:6px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>{row['name']}</p>", unsafe_allow_html=True)
+            cols[3].markdown(f"<span style='font-size:10px;background:{sec_col}18;color:{sec_col};padding:2px 6px;border-radius:6px'>{row['sector']}</span>", unsafe_allow_html=True)
+            cols[4].markdown(f"<p style='font-size:13px;font-weight:600;margin:0;padding:6px 0'>${row['price']:.2f}</p>", unsafe_allow_html=True)
+            cols[5].markdown(f"<p style='font-size:13px;font-weight:600;color:{chg_col};margin:0;padding:6px 0'>{chg_sym}{abs(chg):.2f}%</p>", unsafe_allow_html=True)
+            cols[6].markdown(f"<p style='font-size:12px;color:#444;margin:0;padding:6px 0'>${turnover_b:.1f}B</p>", unsafe_allow_html=True)
+            cols[7].markdown(f"<p style='font-size:12px;color:#444;margin:0;padding:6px 0'>${mktcap_b:.0f}B</p>", unsafe_allow_html=True)
 
-            # 상세 분석 버튼 (같은 행 마지막 칸 역할)
-            btn_col = st.columns([36, 1])
-            if btn_col[1].button(f"📊 {row['ticker']} 상세 분석", key=f"go_{row['ticker']}",
-                                  use_container_width=True):
+            if cols[8].button("분석", key=f"go_{row['ticker']}", use_container_width=True):
                 st.session_state.selected_ticker = row["ticker"]
-                st.session_state.go_to_detail = True
                 st.rerun()
+
+            st.markdown("<hr style='margin:2px 0;border-color:#f5f5f5'>", unsafe_allow_html=True)
 
 # ════════════════════════════════════════════════════════
 # 메인 탭 2: 종목 상세 분석
 # ════════════════════════════════════════════════════════
-# go_to_detail 플래그 처리: TOP100에서 버튼 누르면 탭2로 자동 이동
-if st.session_state.get("go_to_detail"):
-    st.session_state.go_to_detail = False
-    st.session_state.active_main_tab = 1
-
 with main_tabs[1]:
+    # TOP100에서 넘어온 경우 안내
+    sel_t = st.session_state.get("selected_ticker","AAPL")
+    sel_name = next((n for t,n,s in TOP100 if t==sel_t), sel_t)
+    st.markdown(f"<div style='background:#e8f4fd;border-radius:8px;padding:8px 14px;margin-bottom:12px;font-size:13px'>"
+                f"📊 현재 선택 종목: <b>{sel_t} — {sel_name}</b> &nbsp;|&nbsp; "
+                f"<span style='color:#888'>TOP 100 탭에서 종목을 클릭하면 여기서 바로 분석돼요</span></div>",
+                unsafe_allow_html=True)
 
     # 사이드 컨트롤
     ctrl1, ctrl2, ctrl3 = st.columns([2, 1, 1])
