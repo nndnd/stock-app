@@ -50,6 +50,21 @@ st.markdown("""
     .stock-meta { font-size: 11px; color: #aaa; }
     .sector-badge { font-size: 10px; padding: 2px 7px; border-radius: 8px; }
 
+    /* ── 타임프레임 컨트롤 소형화 ── */
+    .tf-bar button {
+        padding: 2px 8px !important;
+        font-size: 12px !important;
+        min-height: 28px !important;
+        height: 28px !important;
+        line-height: 1 !important;
+    }
+    .tf-bar [data-baseweb="select"] > div {
+        min-height: 28px !important;
+        font-size: 12px !important;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+    }
+
     /* ── 모바일 반응형 ── */
     @media (max-width: 768px) {
         .block-container { padding: 0.5rem 0.5rem 2rem !important; }
@@ -597,21 +612,9 @@ with main_tabs[1]:
             alert_high = st.number_input("목표가 $", min_value=0.0, value=0.0, step=1.0)
             alert_low  = st.number_input("하한가 $", min_value=0.0, value=0.0, step=1.0)
 
-    # 타임프레임 버튼
+    # 타임프레임 세션 초기화
     if "timeframe" not in st.session_state:
         st.session_state.timeframe = "일"
-    tf_options = list(INTERVAL_CONFIG.keys())
-    tf_cols = st.columns(len(tf_options))
-    for i, tf in enumerate(tf_options):
-        is_active = st.session_state.timeframe == tf
-        if tf_cols[i].button(
-            tf,
-            key=f"tf_{tf}",
-            use_container_width=True,
-            type="primary" if is_active else "secondary"
-        ):
-            st.session_state.timeframe = tf
-            st.rerun()
     timeframe = st.session_state.timeframe
     period = INTERVAL_CONFIG[timeframe]["period"]
 
@@ -660,6 +663,46 @@ with main_tabs[1]:
     with tabs[0]:
         col_c, col_s = st.columns([3, 1])
         with col_c:
+
+            # ── 타임프레임 컨트롤 (차트 바로 위) ──
+            MIN_TF  = ["1분", "5분", "10분", "60분", "240분"]
+            DAY_TF  = ["일", "주", "월", "년"]
+            is_min  = st.session_state.timeframe in MIN_TF
+
+            st.markdown('<div class="tf-bar">', unsafe_allow_html=True)
+            tf_cols = st.columns([1.3, 0.7, 0.7, 0.7, 0.7])
+
+            with tf_cols[0]:
+                cur_min_idx = MIN_TF.index(st.session_state.timeframe) if is_min else 0
+                sel_min = st.selectbox(
+                    "분봉 선택",
+                    MIN_TF,
+                    index=cur_min_idx,
+                    key="min_tf_sel",
+                    label_visibility="collapsed"
+                )
+                # 분봉 모드일 때: 드롭다운 값 변경 → 즉시 반영
+                # 분봉 모드 아닐 때: 드롭다운을 클릭(값이 0번이 아닌 것 선택, 또는 버튼처럼 사용)
+                # → 분봉 드롭다운 아래 작은 "분봉 전환" 버튼 제공
+                if is_min and sel_min != st.session_state.timeframe:
+                    st.session_state.timeframe = sel_min
+                    st.rerun()
+                if not is_min:
+                    if st.button(f"▶ {sel_min} 적용", key="apply_min_tf",
+                                 use_container_width=True):
+                        st.session_state.timeframe = sel_min
+                        st.rerun()
+
+            for i, tf in enumerate(DAY_TF):
+                with tf_cols[i + 1]:
+                    is_active = st.session_state.timeframe == tf
+                    if st.button(tf, key=f"tf_{tf}", use_container_width=True,
+                                 type="primary" if is_active else "secondary"):
+                        st.session_state.timeframe = tf
+                        st.rerun()
+
+            st.markdown('</div>', unsafe_allow_html=True)
+            timeframe = st.session_state.timeframe
             cfg = INTERVAL_CONFIG[timeframe]
 
             if chart_hist is None or chart_hist.empty:
