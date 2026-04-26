@@ -173,9 +173,24 @@ def get_stock(ticker, period="1y"):
     try:
         s = yf.Ticker(ticker)
         hist = s.history(period=period)
-        info = s.info
+        if hist is None or hist.empty:
+            hist = s.history(period="6mo")
+        try:
+            info = s.info or {}
+        except Exception:
+            info = {}
+        # info가 비어있으면 fast_info로 보완
+        if not info.get("regularMarketPrice") and not info.get("currentPrice"):
+            try:
+                fi = s.fast_info
+                info["regularMarketPrice"] = getattr(fi, "last_price", None)
+                info["marketCap"]          = getattr(fi, "market_cap", None)
+                info["fiftyTwoWeekHigh"]   = getattr(fi, "year_high", None)
+                info["fiftyTwoWeekLow"]    = getattr(fi, "year_low", None)
+            except Exception:
+                pass
         return hist, info
-    except:
+    except Exception:
         return None, {}
 
 # 분봉/시봉/일봉 통합 데이터 함수
@@ -624,12 +639,16 @@ with main_tabs[1]:
         chart_hist = get_chart_data(ticker, timeframe)  # 차트용
 
     if hist is None or hist.empty:
-        st.error("데이터를 불러올 수 없어요. 잠시 후 다시 시도해주세요.")
+        st.error(f"**{ticker}** 데이터를 불러오지 못했어요.")
+        st.caption("Yahoo Finance 일시 장애 또는 티커 오류일 수 있어요. 아래 버튼으로 재시도하거나 잠시 후 다시 시도해주세요.")
+        if st.button("🔄 다시 시도", type="primary"):
+            st.cache_data.clear()
+            st.rerun()
         st.stop()
 
     curr_price = hist["Close"].iloc[-1]
-    prev_price = hist["Close"].iloc[-2]
-    change_pct = (curr_price - prev_price) / prev_price * 100
+    prev_price = hist["Close"].iloc[-2] if len(hist) >= 2 else curr_price
+    change_pct = (curr_price - prev_price) / prev_price * 100 if prev_price else 0
 
     # 알림 체크
     if alert_high > 0 and curr_price >= alert_high:
