@@ -8,7 +8,7 @@ import json
 from datetime import datetime
 
 st.set_page_config(
-    page_title="미국 주식 대시보드",
+    page_title="대시보드",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -1111,11 +1111,6 @@ with main_tabs[1]:
     with tabs[7]:
         st.subheader("카카오톡 알림 설정")
         st.markdown("""
-**토큰 발급 방법**
-1. [developers.kakao.com](https://developers.kakao.com) → 로그인 → 내 애플리케이션
-2. stock-alert 앱 → 카카오 로그인 → 동의항목 → **카카오톡 메시지 전송** → 필수 동의
-3. 도구 → REST API 테스터 → 카카오 로그인 → 토큰 받기 → 내 계정으로 테스트
-4. 발급된 access_token → Streamlit Secrets에 `KAKAO_ACCESS_TOKEN = "값"` 입력
         """)
         st.divider()
         test_msg = st.text_area("테스트 메시지", value=f"[주식 알림 테스트]\n{ticker} 현재가: ${curr_price:.2f}")
